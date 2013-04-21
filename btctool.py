@@ -27,7 +27,7 @@ import argparse
 import curses
 import curses.panel
 import curses.textpad
-import goxapi
+import btcapi
 import logging
 import locale
 import math
@@ -196,11 +196,11 @@ class Win:
 
 class WinConsole(Win):
     """The console window at the bottom"""
-    def __init__(self, stdscr, gox):
+    def __init__(self, stdscr, exch):
         """create the console window and connect it to the Gox debug
         callback function"""
-        self.gox = gox
-        gox.signal_debug.connect(self.slot_debug)
+        self.exch = exch
+        exch.signal_debug.connect(self.slot_debug)
         Win.__init__(self, stdscr)
 
     def paint(self):
@@ -220,7 +220,7 @@ class WinConsole(Win):
         self.height = HEIGHT_CON
         self.posy = self.termheight - self.height
 
-    def slot_debug(self, dummy_gox, (txt)):
+    def slot_debug(self, dummy_exch, (txt)):
         """this slot will be connected to all debug signals."""
         self.write(txt)
 
@@ -233,11 +233,11 @@ class WinConsole(Win):
 class WinOrderBook(Win):
     """the orderbook window"""
 
-    def __init__(self, stdscr, gox):
+    def __init__(self, stdscr, exch):
         """create the orderbook window and connect it to the
-        onChanged callback of the gox.orderbook instance"""
-        self.gox = gox
-        gox.orderbook.signal_changed.connect(self.slot_changed)
+        onChanged callback of the exch.orderbook instance"""
+        self.exch = exch
+        exch.orderbook.signal_changed.connect(self.slot_changed)
         Win.__init__(self, stdscr)
 
     def calc_size(self):
@@ -258,16 +258,16 @@ class WinOrderBook(Win):
 
         # print the asks
         # pylint: disable=C0301
-        book = self.gox.orderbook
+        book = self.exch.orderbook
         pos = mid - 1
         i = 0
         cnt = len(book.asks)
         while pos >= 0 and  i < cnt:
-            self.addstr(pos, 0,  goxapi.int2str(book.asks[i].price, book.gox.currency), col_ask)
-            self.addstr(pos, 12, goxapi.int2str(book.asks[i].volume, "BTC"), col_vol)
+            self.addstr(pos, 0,  btcapi.int2str(book.asks[i].price, book.exch.currency), col_ask)
+            self.addstr(pos, 12, btcapi.int2str(book.asks[i].volume, "BTC"), col_vol)
             ownvol = book.get_own_volume_at(book.asks[i].price)
             if ownvol:
-                self.addstr(pos, 28, goxapi.int2str(ownvol, "BTC"), col_own)
+                self.addstr(pos, 28, btcapi.int2str(ownvol, "BTC"), col_own)
             pos -= 1
             i += 1
 
@@ -276,11 +276,11 @@ class WinOrderBook(Win):
         i = 0
         cnt = len(book.bids)
         while pos < self.height and  i < cnt:
-            self.addstr(pos, 0,  goxapi.int2str(book.bids[i].price, book.gox.currency), col_bid)
-            self.addstr(pos, 12, goxapi.int2str(book.bids[i].volume, "BTC"), col_vol)
+            self.addstr(pos, 0,  btcapi.int2str(book.bids[i].price, book.exch.currency), col_bid)
+            self.addstr(pos, 12, btcapi.int2str(book.bids[i].volume, "BTC"), col_vol)
             ownvol = book.get_own_volume_at(book.bids[i].price)
             if ownvol:
-                self.addstr(pos, 28, goxapi.int2str(ownvol, "BTC"), col_own)
+                self.addstr(pos, 28, btcapi.int2str(ownvol, "BTC"), col_own)
             pos += 1
             i += 1
 
@@ -289,25 +289,25 @@ class WinOrderBook(Win):
         self.do_paint()
 
         # update the xterm title (this is not handled by curses)
-        if self.gox.config.get_bool("goxtool", "set_xterm_title"):
-            last_candle = self.gox.history.last_candle()
+        if self.exch.config.get_bool("btctool", "set_xterm_title"):
+            last_candle = self.exch.history.last_candle()
             if last_candle:
-                title = goxapi.int2str(last_candle.cls, self.gox.currency).strip()
-                title += " - goxtool -"
-                title += " bid:" + goxapi.int2str(book.bid, self.gox.currency).strip()
-                title += " ask:" + goxapi.int2str(book.ask, self.gox.currency).strip()
+                title = btcapi.int2str(last_candle.cls, self.exch.currency).strip()
+                title += " - btctool -"
+                title += " bid:" + btcapi.int2str(book.bid, self.exch.currency).strip()
+                title += " ask:" + btcapi.int2str(book.ask, self.exch.currency).strip()
                 curses.putp("\033]0;%s\007" % title)
 
 
 class WinChart(Win):
     """the chart window"""
 
-    def __init__(self, stdscr, gox):
-        self.gox = gox
+    def __init__(self, stdscr, exch):
+        self.exch = exch
         self.pmin = 0
         self.pmax = 0
-        gox.history.signal_changed.connect(self.slot_hist_changed)
-        gox.orderbook.signal_changed.connect(self.slot_book_changed)
+        exch.history.signal_changed.connect(self.slot_hist_changed)
+        exch.orderbook.signal_changed.connect(self.slot_book_changed)
         Win.__init__(self, stdscr)
 
     def calc_size(self):
@@ -378,8 +378,8 @@ class WinChart(Win):
         self.win.bkgd(" ",  COLOR_PAIR["chart_text"])
         self.win.erase()
 
-        hist = self.gox.history
-        book = self.gox.orderbook
+        hist = self.exch.history
+        book = self.exch.orderbook
 
         self.pmax = 0
         self.pmin = 9999999999
@@ -442,7 +442,7 @@ class WinChart(Win):
                 if posy < self.height - 1:
                     self.addstr(
                         posy, posx,
-                        goxapi.int2str(labelprice, self.gox.currency),
+                        btcapi.int2str(labelprice, self.exch.currency),
                         COLOR_PAIR["chart_text"]
                     )
                 labelprice += step
@@ -459,14 +459,14 @@ class WinChart(Win):
 class WinStatus(Win):
     """the status window at the top"""
 
-    def __init__(self, stdscr, gox):
+    def __init__(self, stdscr, exch):
         """create the status window and connect the needed callbacks"""
-        self.gox = gox
+        self.exch = exch
         self.order_lag = 0
         self.order_lag_txt = ""
-        gox.signal_orderlag.connect(self.slot_orderlag)
-        gox.signal_wallet.connect(self.slot_changed)
-        gox.orderbook.signal_changed.connect(self.slot_changed)
+        exch.signal_orderlag.connect(self.slot_orderlag)
+        exch.signal_wallet.connect(self.slot_changed)
+        exch.orderbook.signal_changed.connect(self.slot_changed)
         Win.__init__(self, stdscr)
 
     def calc_size(self):
@@ -477,35 +477,35 @@ class WinStatus(Win):
         """paint the complete status"""
         self.win.bkgd(" ", COLOR_PAIR["status_text"])
         self.win.erase()
-        line1 = "Currency: " + self.gox.currency + " | "
+        line1 = "Currency: " + self.exch.currency + " | "
         line1 += "Account: "
-        if len(self.gox.wallet):
-            for currency in self.gox.wallet:
+        if len(self.exch.wallet):
+            for currency in self.exch.wallet:
                 line1 += currency + " " \
-                + goxapi.int2str(self.gox.wallet[currency], currency).strip() \
+                + btcapi.int2str(self.exch.wallet[currency], currency).strip() \
                 + " + "
             line1 = line1.strip(" +")
         else:
             line1 += "No info (yet)"
 
-        str_btc = locale.format('%d', self.gox.orderbook.total_ask, 1)
-        str_fiat = locale.format('%d', self.gox.orderbook.total_bid, 1)
-        if self.gox.orderbook.total_ask:
+        str_btc = locale.format('%d', self.exch.orderbook.total_ask, 1)
+        str_fiat = locale.format('%d', self.exch.orderbook.total_bid, 1)
+        if self.exch.orderbook.total_ask:
             str_ratio = locale.format('%1.2f',
-                self.gox.orderbook.total_bid / self.gox.orderbook.total_ask, 1)
+                self.exch.orderbook.total_bid / self.exch.orderbook.total_ask, 1)
         else:
             str_ratio = "-"
 
-        line2 = "total bid: " + str_fiat + " " + self.gox.currency + " | "
+        line2 = "total bid: " + str_fiat + " " + self.exch.currency + " | "
         line2 += "total ask: " +str_btc + " BTC | "
-        line2 += "ratio: " + str_ratio + " " + self.gox.currency + "/BTC | "
+        line2 += "ratio: " + str_ratio + " " + self.exch.currency + "/BTC | "
         line2 += "lag: " + self.order_lag_txt
         self.addstr(0, 0, line1, COLOR_PAIR["status_text"])
         self.addstr(1, 0, line2, COLOR_PAIR["status_text"])
 
 
     def slot_changed(self, dummy_sender, dummy_data):
-        """the callback funtion called by the Gox() instance"""
+        """the callback funtion called by the exch() instance"""
         self.do_paint()
 
     def slot_orderlag(self, dummy_sender, (usec, text)):
@@ -621,14 +621,14 @@ class DlgListItems(Win):
 
 class DlgCancelOrders(DlgListItems):
     """modal dialog to cancel orders"""
-    def __init__(self, stdscr, gox):
-        self.gox = gox
+    def __init__(self, stdscr, exch):
+        self.exch = exch
         hlp = [("INS", "select"), ("F8", "cancel selected"), ("F10", "exit")]
         keys = [(curses.KEY_F8, self._do_cancel)]
         DlgListItems.__init__(self, stdscr, 45, "Cancel order(s)", hlp, keys)
 
     def init_items(self):
-        for order in self.gox.orderbook.owns:
+        for order in self.exch.orderbook.owns:
             self.items.append(order)
         self.items.sort(key = lambda o: -o.price)
 
@@ -650,15 +650,15 @@ class DlgCancelOrders(DlgListItems):
 
         self.addstr(posy, 2, marker, attr)
         self.addstr(posy, 5, order.typ, attr)
-        self.addstr(posy, 9, goxapi.int2str(order.price, self.gox.currency), attr)
-        self.addstr(posy, 22, goxapi.int2str(order.volume, "BTC"), attr)
+        self.addstr(posy, 9, btcapi.int2str(order.price, self.exch.currency), attr)
+        self.addstr(posy, 22, btcapi.int2str(order.volume, "BTC"), attr)
 
     def _do_cancel(self):
         """cancel all selected orders (or the order under cursor if empty)"""
 
         def do_cancel(order):
             """cancel a single order"""
-            self.gox.cancel(order.oid)
+            self.exch.cancel(order.oid)
 
         if not len(self.items):
             return
@@ -722,7 +722,7 @@ class TextBox():
         position. This is only a cosmetic problem but very annnoying. Try to
         force it into the edit field by repainting it very often."""
         while self.editing:
-            with goxapi.Signal._lock:
+            with btcapi.Signal._lock:
                 self.win.touchwin()
                 self.win.refresh()
             time.sleep(0.1)
@@ -745,8 +745,8 @@ class NumberBox(TextBox):
 
 class DlgNewOrder(Win):
     """abtract base class for entering new orders"""
-    def __init__(self, stdscr, gox, color, title):
-        self.gox = gox
+    def __init__(self, stdscr, exch, color, title):
+        self.exch = exch
         self.color = color
         self.title = title
         self.edit_price = None
@@ -821,28 +821,28 @@ class DlgNewOrder(Win):
 
 class DlgNewOrderBid(DlgNewOrder):
     """Modal dialog for new buy order"""
-    def __init__(self, stdscr, gox):
-        DlgNewOrder.__init__(self, stdscr, gox,
+    def __init__(self, stdscr, exch):
+        DlgNewOrder.__init__(self, stdscr, exch,
             COLOR_PAIR["dialog_bid_text"],
             "New buy order")
 
     def do_submit(self, price, volume):
-        price = goxapi.float2int(price, self.gox.currency)
-        volume = goxapi.float2int(volume, "BTC")
-        self.gox.buy(price, volume)
+        price = btcapi.float2int(price, self.exch.currency)
+        volume = btcapi.float2int(volume, "BTC")
+        self.exch.buy(price, volume)
 
 
 class DlgNewOrderAsk(DlgNewOrder):
     """Modal dialog for new sell order"""
-    def __init__(self, stdscr, gox):
-        DlgNewOrder.__init__(self, stdscr, gox,
+    def __init__(self, stdscr, exch):
+        DlgNewOrder.__init__(self, stdscr, exch,
              COLOR_PAIR["dialog_ask_text"],
             "New sell order")
 
     def do_submit(self, price, volume):
-        price = goxapi.float2int(price, self.gox.currency)
-        volume = goxapi.float2int(volume, "BTC")
-        self.gox.sell(price, volume)
+        price = btcapi.float2int(price, self.exch.currency)
+        volume = btcapi.float2int(volume, "BTC")
+        self.exch.sell(price, volume)
 
 
 
@@ -852,15 +852,15 @@ class DlgNewOrderAsk(DlgNewOrder):
 #
 
 class LogWriter():
-    """connects to gox.signal_debug and logs it all to the logfile"""
-    def __init__(self, gox):
-        self.gox = gox
-        logging.basicConfig(filename='goxtool.log'
+    """connects to exch.signal_debug and logs it all to the logfile"""
+    def __init__(self, exch):
+        self.exch = exch
+        logging.basicConfig(filename='btctool.log'
                            ,filemode='w'
                            ,format='%(asctime)s:%(levelname)s:%(message)s'
                            ,level=logging.DEBUG
                            )
-        self.gox.signal_debug.connect(self.slot_debug)
+        self.exch.signal_debug.connect(self.slot_debug)
 
     def close(self):
         """stop logging"""
@@ -874,9 +874,9 @@ class LogWriter():
 
 
 class PrintHook():
-    """intercept stdout/stderr and send it all to gox.signal_debug instead"""
-    def __init__(self, gox):
-        self.gox = gox
+    """intercept stdout/stderr and send it all to exch.signal_debug instead"""
+    def __init__(self, exch):
+        self.exch = exch
         self.stdout = sys.stdout
         self.stderr = sys.stderr
         sys.stdout = self
@@ -888,10 +888,10 @@ class PrintHook():
         sys.stderr = self.stderr
 
     def write(self, string):
-        """called when someone uses print(), send it to gox"""
+        """called when someone uses print(), send it to exch"""
         string = string.strip()
         if string != "":
-            self.gox.signal_debug(self, string)
+            self.exch.signal_debug(self, string)
 
 
 
@@ -903,15 +903,15 @@ class PrintHook():
 class StrategyManager():
     """load the strategy module"""
 
-    def __init__(self, gox, strategy_module_name):
+    def __init__(self, exch, strategy_module_name):
         self.strategy_object = None
         self.strategy_module_name = strategy_module_name
-        self.gox = gox
+        self.exch = exch
         self.reload()
 
     def unload(self):
         """unload the strategy, will trigger its the __del__ method"""
-        self.gox.signal_strategy_unload(self, None)
+        self.exch.signal_strategy_unload(self, None)
         self.strategy_object = None
 
     def reload(self):
@@ -921,16 +921,16 @@ class StrategyManager():
             try:
                 self.unload()
                 reload(strategy_module)
-                self.strategy_object = strategy_module.Strategy(self.gox)
+                self.strategy_object = strategy_module.Strategy(self.exch)
 
             # pylint: disable=W0703
             except Exception:
-                self.gox.debug(traceback.format_exc())
+                self.exch.debug(traceback.format_exc())
 
         except ImportError:
-            self.gox.debug("### could not import %s.py"
+            self.exch.debug("### could not import %s.py"
                 % self.strategy_module_name)
-            self.gox.debug("### running without strategy module")
+            self.exch.debug("### running without strategy module")
 
 
 
@@ -947,31 +947,31 @@ def main():
 
         init_colors()
 
-        gox = goxapi.Gox(secret, config)
+        exch = btcapi.Exch(secret, config)
 
-        conwin = WinConsole(stdscr, gox)
-        bookwin = WinOrderBook(stdscr, gox)
-        statuswin = WinStatus(stdscr, gox)
-        chartwin = WinChart(stdscr, gox)
+        conwin = WinConsole(stdscr, exch)
+        bookwin = WinOrderBook(stdscr, exch)
+        statuswin = WinStatus(stdscr, exch)
+        chartwin = WinChart(stdscr, exch)
 
-        logwriter = LogWriter(gox)
-        printhook = PrintHook(gox)
-        strategy_manager = StrategyManager(gox, strat_mod_name)
+        logwriter = LogWriter(exch)
+        printhook = PrintHook(exch)
+        strategy_manager = StrategyManager(exch, strat_mod_name)
 
-        gox.start()
+        exch.start()
         try:
             while True:
                 key = conwin.win.getch()
                 if key == ord("q"):
                     break
                 if key == curses.KEY_F4:
-                    DlgNewOrderBid(stdscr, gox).modal()
+                    DlgNewOrderBid(stdscr, exch).modal()
                 if key == curses.KEY_F5:
-                    DlgNewOrderAsk(stdscr, gox).modal()
+                    DlgNewOrderAsk(stdscr, exch).modal()
                 if key == curses.KEY_F6:
-                    DlgCancelOrders(stdscr, gox).modal()
+                    DlgCancelOrders(stdscr, exch).modal()
                 if key == curses.KEY_RESIZE:
-                    with goxapi.Signal._lock:
+                    with btcapi.Signal._lock:
                         stdscr.erase()
                         stdscr.refresh()
                         conwin.resize()
@@ -983,16 +983,16 @@ def main():
                     strategy_manager.reload()
                     continue
                 if key > ord("a") and key < ord("z"):
-                    gox.signal_keypress(gox, (key))
+                    exch.signal_keypress(exch, (key))
 
         except KeyboardInterrupt:
-            gox.debug("got Ctrl+C, trying to shut down cleanly.")
-            gox.debug("Hint: did you know you can also exit with 'q'?")
+            exch.debug("got Ctrl+C, trying to shut down cleanly.")
+            exch.debug("Hint: did you know you can also exit with 'q'?")
         except Exception:
-            gox.debug(traceback.format_exc())
+            exch.debug(traceback.format_exc())
 
         strategy_manager.unload()
-        gox.stop()
+        exch.stop()
         printhook.close()
         logwriter.close()
         # The End.
@@ -1006,7 +1006,7 @@ def main():
 
     # before we can finally start the curses UI we might need to do some user
     # interaction on the command line, regarding the encrypted secret
-    argp = argparse.ArgumentParser(description='MtGox live market data monitor'
+    argp = argparse.ArgumentParser(description='Mtexch live market data monitor'
         + ' and trading bot experimentation framework')
     argp.add_argument('--add-secret', action="store_true",
         help="prompt for API secret, encrypt it and then exit")
@@ -1022,17 +1022,17 @@ def main():
         help="use http api for trading (useful when socketio is lagging like hell")
     args = argp.parse_args()
 
-    config = goxapi.GoxConfig("goxtool.ini")
-    secret = goxapi.Secret(config)
+    config = btcapi.exchConfig("btctool.ini")
+    secret = btcapi.Secret(config)
     if args.add_secret:
         # prompt for secret, encrypt, write to .ini and then exit the program
         secret.prompt_encrypt()
     else:
         strat_mod_name = args.strategy.replace(".py", "")
-        goxapi.FORCE_PROTOCOL = args.protocol
-        goxapi.FORCE_NO_FULLDEPTH = args.no_fulldepth
-        goxapi.FORCE_NO_HISTORY = args.no_history
-        goxapi.FORCE_HTTP_API = args.use_http
+        btcapi.FORCE_PROTOCOL = args.protocol
+        btcapi.FORCE_NO_FULLDEPTH = args.no_fulldepth
+        btcapi.FORCE_NO_HISTORY = args.no_history
+        btcapi.FORCE_HTTP_API = args.use_http
         if secret.prompt_decrypt() != secret.S_FAIL_FATAL:
             curses.wrapper(curses_loop)
             print
