@@ -1,4 +1,8 @@
-#goxtool.py
+#btctool.py
+
+This is a fork of goxtool.py by prof7bit, in an attempt to make it work with the campbx exchange.
+
+Original readme:
 
 Goxtool is a trading client for the MtGox Bitcon currency exchange. It is
 designed to work in the Linux console (it has a curses user interface). It
