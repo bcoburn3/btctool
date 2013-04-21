@@ -118,23 +118,24 @@ def pretty_format(something):
 
 
 # pylint: disable=R0904
-class GoxConfig(SafeConfigParser):
+class BtcConfig(SafeConfigParser):
     """return a config parser object with default values. If you need to run
     more Gox() objects at the same time you will also need to give each of them
     them a separate GoxConfig() object. For this reason it takes a filename
     in its constructor for the ini file, you can have separate configurations
     for separate Gox() instances"""
 
-    _DEFAULTS = [["gox", "currency", "USD"]
-                ,["gox", "use_ssl", "True"]
-                ,["gox", "use_plain_old_websocket", "False"]
-                ,["gox", "use_http_api", "False"]
-                ,["gox", "load_fulldepth", "True"]
-                ,["gox", "load_history", "True"]
-                ,["gox", "history_timeframe", "15"]
-                ,["gox", "secret_key", ""]
-                ,["gox", "secret_secret", ""]
-                ,["goxtool", "set_xterm_title", "True"]
+    _DEFAULTS = [["btc", "currency", "USD"]
+                ,["btc", "use_ssl", "True"]
+                ,["btc", "use_plain_old_websocket", "False"]
+                ,["btc", "use_http_api", "False"]
+                ,["btc", "load_fulldepth", "True"]
+                ,["btc", "load_history", "True"]
+                ,["btc", "history_timeframe", "15"]
+                ,["btc", "secret_key", ""]
+                ,["btc", "secret_secret", ""]
+		,["btc", "exchange", "mtgox"]
+                ,["btctool", "set_xterm_title", "True"]
                 ]
 
     def __init__(self, filename):
@@ -271,7 +272,7 @@ class Signal():
 
 class BaseObject():
     """This base class only exists because of the debug() method that is used
-    in many of the goxtool objects to send debug output to the signal_debug."""
+    in many of the btctool objects to send debug output to the signal_debug."""
 
     def __init__(self):
         self.signal_debug = Signal()
@@ -334,8 +335,8 @@ class Secret:
         This will return false if decryption did not seem to be successful.
         After this menthod succeeded the application can access the secret"""
 
-        key = self.config.get_string("gox", "secret_key")
-        sec = self.config.get_string("gox", "secret_secret")
+        key = self.config.get_string("btc", "secret_key")
+        sec = self.config.get_string("btc", "secret_secret")
         if sec == "" or key == "":
             return self.S_NO_SECRET
 
@@ -474,17 +475,17 @@ class OHLCV():
 class History(BaseObject):
     """represents the trading history"""
 
-    def __init__(self, gox, timeframe):
+    def __init__(self, exch, timeframe):
         BaseObject.__init__(self)
 
         self.signal_changed = Signal()
 
-        self.gox = gox
+        self.exch = exch
         self.candles = []
         self.timeframe = timeframe
 
-        gox.signal_trade.connect(self.slot_trade)
-        gox.signal_fullhistory.connect(self.slot_fullhistory)
+        exch.signal_trade.connect(self.slot_trade)
+        exch.signal_fullhistory.connect(self.slot_fullhistory)
 
     def add_candle(self, candle):
         """add a new candle to the history"""
@@ -492,7 +493,7 @@ class History(BaseObject):
         self.signal_changed(self, (self.length()))
 
     def slot_trade(self, dummy_sender, data):
-        """slot for gox.signal_trade"""
+        """slot for exch.signal_trade"""
         (date, price, volume, dummy_typ, own) = data
         if not own:
             time_round = int(date / self.timeframe) * self.timeframe
@@ -638,7 +639,7 @@ class BaseClient(BaseObject):
             and then terminate. This is called in a separate thread after
             the streaming API has been connected."""
             self.debug("requesting initial full depth")
-            use_ssl = self.config.get_bool("gox", "use_ssl")
+            use_ssl = self.config.get_bool("exch", "use_ssl")
             proto = {True: "https", False: "http"}[use_ssl]
             fulldepth = http_request(proto + "://" +  self.HTTP_HOST \
                 + "/api/2/BTC" + self.currency + "/money/depth/full")
@@ -1019,6 +1020,40 @@ class SocketIOClient(BaseClient):
         if self.connected:
             self.debug("sending keepalive")
             self._try_send_raw("2::")
+
+class Exch(BaseObject):
+    """selects the correct exchange API object based on the configuration"""
+
+    def __init__(self, secret, config):
+        exchname = config.get("btc", "exchange")
+	if exchname "mtgox":
+            self.Exch = Gox(secret, config)
+	else:
+	    self.Exch = Campbx(secret, config)
+	self.config = config
+	self.secret = secret
+	self.start = Exch.start
+	self.stop = Exch.stop
+	self.order = Exch.order
+	self.buy = Exch.buy
+	self.sell = Exch.sell
+	self.cancel = Exch.cancel
+	self.cancel_by_price = Exch.cancel_by_price
+	self.cancel_by_type = Exch.cancel_by_type
+	self.slot_recv = Exch.slot_recv
+	self.slot_poll = Exch.slot_poll
+	self.slot_history_changed = Exch.slot_history_changed
+	self._on_op_error = Exch._on_op_error
+	self._on_op_result = Exch._on_op_result
+	self._on_op_private = Exch._on_op_private
+	self._on_op_private_ticker = Exch._on_op_private_ticker
+	self._on_op_private_depth = Exch._on_op_private_depth
+	self._on_op_private_trade = Exch._on_op_private_depth
+	self._on_op_private_user_order = Exch._on_op_private_user_order
+	self._on_op_private_wallet = Exch._on_op_private_wallet
+	self._on_op_private_lag = Exch._on_op_private_lag
+	self._on_op_remark = Exch._on_op_remark
+	self._on_invalid_call = Exch._op_invalid_call
 
 
 # pylint: disable=R0902
