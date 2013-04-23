@@ -1026,7 +1026,7 @@ class Exch(BaseObject):
 
     def __init__(self, secret, config):
         exchname = config.get("btc", "exchange")
-	if exchname "mtgox":
+	if exchname == "mtgox":
             self.Exch = Gox(secret, config)
 	else:
 	    self.Exch = Campbx(secret, config)

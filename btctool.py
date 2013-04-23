@@ -1022,7 +1022,7 @@ def main():
         help="use http api for trading (useful when socketio is lagging like hell")
     args = argp.parse_args()
 
-    config = btcapi.exchConfig("btctool.ini")
+    config = btcapi.BtcConfig("btctool.ini")
     secret = btcapi.Secret(config)
     if args.add_secret:
         # prompt for secret, encrypt, write to .ini and then exit the program
